@@ -15,6 +15,7 @@
 #include "async.h"
 #include "adapters/ae.h"
 #include "ae.h"
+#include "easy_async.h"
 
 /* Put event loop in the global scope, so it can be explicitly stopped */
 static aeEventLoop *loop;
@@ -53,7 +54,7 @@ void disconnectCallback(const redisAsyncContext *c, int status) {
 int main (int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
 
-    redisAsyncContext *c = redisAsyncConnect("127.0.0.1", 6379);
+    redisAsyncContext *c = redisAsyncConnect("127.0.0.1", 8888);
 
     if (c->err) {
         /* Let *c leak for now... */
@@ -62,7 +63,7 @@ int main (int argc, char **argv) {
     }
 
     loop = aeCreateEventLoop(64);
-    redisAeAttach(loop, c);
+    easyAeAttach(loop, c);
     redisAsyncSetConnectCallback(c,connectCallback);
     redisAsyncSetDisconnectCallback(c,disconnectCallback);
 
