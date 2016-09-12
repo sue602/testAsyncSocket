@@ -149,6 +149,7 @@ int main (int argc, char **argv) {
         printf("Error: %s\n", c->errstr);
         return 1;
     }
+
     easy_buffer_callback * buff_callback;
     buff_callback =(easy_buffer_callback *) zmalloc(sizeof(*buff_callback));
     buff_callback->read_callback = easyBufferRead;

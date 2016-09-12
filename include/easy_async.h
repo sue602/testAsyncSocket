@@ -15,6 +15,7 @@ typedef int (easyBufferWriteCallback)(struct redisContext*c,int *done);
 typedef struct {
 	easyBufferReadCallback *read_callback;
 	easyBufferWriteCallback *write_callback;
+	void * client;
 }easy_buffer_callback;
 
 void easyAeReadEvent(aeEventLoop *el, int fd, void *privdata, int mask);
