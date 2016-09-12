@@ -5,7 +5,7 @@
  *      Author: ltzd
  */
 
-
+#include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
 #include "easy_async.h"
@@ -29,23 +29,6 @@
         if ((ctx)->ev.cleanup) (ctx)->ev.cleanup((ctx)->ev.data); \
     } while(0);
 
-
-static void __redisSetError(redisContext *c, int type, const char *str) {
-    size_t len;
-
-    c->err = type;
-    if (str != NULL) {
-        len = strlen(str);
-        len = len < (sizeof(c->errstr)-1) ? len : (sizeof(c->errstr)-1);
-        memcpy(c->errstr,str,len);
-        c->errstr[len] = '\0';
-    } else {
-        /* Only REDIS_ERR_IO may lack a description! */
-        assert(type == REDIS_ERR_IO);
-        strerror_r(errno,c->errstr,sizeof(c->errstr));
-    }
-}
-
 /* We want the error field to be accessible directly instead of requiring
  * an indirection to the redisContext struct. */
 static void __redisAsyncCopyError(redisAsyncContext *ac) {
@@ -57,7 +40,7 @@ static void __redisAsyncCopyError(redisAsyncContext *ac) {
 /* Helper function to free the context. */
 static void __redisAsyncFree(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
-    redisCallback cb;
+    //redisCallback cb;
 
     /* Execute pending callbacks with NULL reply. */
 //    while (__redisShiftCallback(&ac->replies,&cb) == REDIS_OK)
@@ -127,78 +110,6 @@ static int __easyAsyncHandleConnect(redisAsyncContext *ac) {
     return REDIS_OK;
 }
 
-/* Use this function to handle a read event on the descriptor. It will try
- * and read some bytes from the socket and feed them to the reply parser.
- *
- * After this function is called, you may use redisContextReadReply to
- * see if there is a reply available. */
-int easyBufferRead(redisContext *c) {
-    char buf[1024*16]={0};
-    int nread;
-
-    /* Return early when the context has seen an error. */
-    if (c->err)
-        return REDIS_ERR;
-
-    nread = read(c->fd,buf,sizeof(buf));
-    if (nread == -1) {
-        if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR)) {
-            /* Try again later */
-        } else {
-            __redisSetError(c,REDIS_ERR_IO,NULL);
-            return REDIS_ERR;
-        }
-    } else if (nread == 0) {
-        __redisSetError(c,REDIS_ERR_EOF,"Server closed the connection");
-        return REDIS_ERR;
-    } else {
-//        if (redisReaderFeed(c->reader,buf,nread) != REDIS_OK) {
-//            __redisSetError(c,c->reader->err,c->reader->errstr);
-//            return REDIS_ERR;
-//        }
-    	printf("buf == %s \n",buf+2);
-    }
-    return REDIS_OK;
-}
-
-/* Write the output buffer to the socket.
- *
- * Returns REDIS_OK when the buffer is empty, or (a part of) the buffer was
- * succesfully written to the socket. When the buffer is empty after the
- * write operation, "done" is set to 1 (if given).
- *
- * Returns REDIS_ERR if an error occured trying to write and sets
- * c->errstr to hold the appropriate error string.
- */
-int easyBufferWrite(redisContext *c, int *done) {
-    int nwritten;
-
-    /* Return early when the context has seen an error. */
-    if (c->err)
-        return REDIS_ERR;
-
-    if (sdslen(c->obuf) > 0) {
-        nwritten = write(c->fd,c->obuf,sdslen(c->obuf));
-        if (nwritten == -1) {
-            if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR)) {
-                /* Try again later */
-            } else {
-                __redisSetError(c,REDIS_ERR_IO,NULL);
-                return REDIS_ERR;
-            }
-        } else if (nwritten > 0) {
-            if (nwritten == (signed)sdslen(c->obuf)) {
-                sdsfree(c->obuf);
-                c->obuf = sdsempty();
-            } else {
-                sdsrange(c->obuf,nwritten,-1);
-            }
-        }
-    }
-    if (done != NULL) *done = (sdslen(c->obuf) == 0);
-    return REDIS_OK;
-}
-
 /* This function should be called when the socket is readable.
  * It processes all replies that can be read and executes their callbacks.
  */
@@ -213,8 +124,8 @@ void easyAsyncHandleRead(redisAsyncContext *ac) {
         if (!(c->flags & REDIS_CONNECTED))
             return;
     }
-
-    if (easyBufferRead(c) == REDIS_ERR) {
+    easy_buffer_callback* buff_callback = (easy_buffer_callback*)( ac->data );
+    if ( buff_callback && buff_callback->read_callback && buff_callback->read_callback(c) == REDIS_ERR) {
         __redisAsyncDisconnect(ac);
     } else {
         /* Always re-schedule reads */
@@ -236,7 +147,8 @@ void easyAsyncHandleWrite(redisAsyncContext *ac) {
             return;
     }
 
-    if (easyBufferWrite(c,&done) == REDIS_ERR) {
+    easy_buffer_callback* buff_callback = (easy_buffer_callback*)( ac->data );
+    if ( buff_callback && buff_callback->write_callback && buff_callback->write_callback(c,&done) == REDIS_ERR) {
         __redisAsyncDisconnect(ac);
     } else {
         /* Continue writing when not done, stop writing otherwise */

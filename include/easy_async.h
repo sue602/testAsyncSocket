@@ -9,6 +9,14 @@
 #include "ae.h"
 #include "async.h"
 
+typedef int (easyBufferReadCallback)(struct redisContext*c);
+typedef int (easyBufferWriteCallback)(struct redisContext*c,int *done);
+
+typedef struct {
+	easyBufferReadCallback *read_callback;
+	easyBufferWriteCallback *write_callback;
+}easy_buffer_callback;
+
 void easyAeReadEvent(aeEventLoop *el, int fd, void *privdata, int mask);
 
 void easyAeWriteEvent(aeEventLoop *el, int fd, void *privdata, int mask);
@@ -24,10 +32,6 @@ void easyAeDelWrite(void *privdata);
 void easyAeCleanup(void *privdata);
 
 int easyAeAttach(aeEventLoop *loop, redisAsyncContext *ac);
-
-int easyBufferRead(redisContext *c);
-
-int easyBufferWrite(redisContext *c, int *done);
 
 
 #endif
